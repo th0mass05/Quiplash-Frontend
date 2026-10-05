@@ -4,7 +4,7 @@
   "description": "ECS Example Game",
   "main": "app.js",
   "engines": {
-    "node": "20.x"
+    "node": "24.x || 26.x"
   },
   "scripts": {
     "start": "node app.js",
@@ -14,8 +14,8 @@
   "author": "Oli Bills",
   "license": "ECS",
   "dependencies": {
-    "ejs": "^3.1.6",
-    "express": "^4.17.1",
-    "socket.io": "^4.3.1"
+    "ejs": "^3.1.10",
+    "express": "^4.22.3",
+    "socket.io": "^4.8.4"
   }
 }
