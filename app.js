@@ -8,6 +8,8 @@ const app = express();
 const server = require('http').Server(app);
 const io = require('socket.io')(server);
 
+require('dotenv').config();
+
 //Setup static page handling
 app.set('view engine', 'ejs');
 app.use('/static', express.static('public'));
@@ -23,6 +25,8 @@ app.get('/display', (req, res) => {
 
 // URL of the backend API
 const BACKEND_ENDPOINT = process.env.BACKEND || 'http://localhost:8181';
+const AI_URL = process.env.AI_URL || 'https://openai.azure.com/';
+const AI_KEY = process.env.AI_KEY || 'A'; // Default value if not set
 
 //Start the server
 function startServer() {
