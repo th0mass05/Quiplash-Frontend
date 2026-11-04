@@ -7,6 +7,26 @@
 
     <div id="game">
         <div v-if="connected">
+            <div>
+                <label for="username">Username:</label>
+                <input id = "username" type = "text" v-model = "username">
+                <label for = "password">Password:</label>
+                <input id = "password" type = "password" v-model = "password">
+                <button type= "button" @click="register">Register</button>
+                <p>{{registerMessage}}</p>
+            </div>
+            <button type="button" @click = "login">Login</button>
+            <p>{{loginMessage}}</p>
+            <div v-if="player">
+                <h3>Welcome, {{player.username}}!</h3>
+                <p>Role: {{player.role}}</p>
+                <p v-if="player.isAdmin">You are the admin.</p>
+                <p>Total Score: {{player.totalScore}}</p>
+                <p>Round Score: {{player.roundScore}}</p>
+                <p>Current Phase: {{phase}}</p>
+                <button type = "button" v-if = "player.isAdmin" @click = "next">Next</button>
+                <p style="color: red;" v-if="errorMsg">{{errorMsg}}</p>
+            </div>
             <%- include('chat'); -%>
         </div>
         <div v-else>

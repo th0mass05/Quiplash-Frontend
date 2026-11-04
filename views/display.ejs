@@ -7,6 +7,10 @@
 
     <div id="game">
         <div v-if="connected">
+            <p>Phase: {{phase}}</p>
+            <p>Round: {{round}}</p>
+            <p>Players: {{players.length}}</p>
+            <p>Audience: {{audience.length}}</p>
             <ul id="chat">
                 <li v-for="message in messages">{{message}}</li>
             </ul>
