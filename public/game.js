@@ -18,8 +18,16 @@ var app = new Vue({
         player: null,
         players: [],
         audience: [],
+        audienceCount: 0,
 
-        errorMsg: ''
+        errorMsg: '',
+
+        joinUrl: window.location.origin + '/',
+
+        promptText: '',
+        promptTags: '',
+        promptMessage: ''
+
     },
     mounted: function() {
         connect(); 
@@ -47,7 +55,14 @@ var app = new Vue({
         },
 
         next() {
+            this.errorMsg = "";
             socket.emit("next");
+        },
+
+        submitPrompt() {
+            const tagInputs = this.promptTags.split(",").map((x) => x.trim())
+            this.promptMessage = "Submitting prompt...";
+            socket.emit("prompt", {text: this.promptText, tags: tagInputs})
         }
     }
 });
@@ -99,8 +114,12 @@ function connect() {
     socket.on("game-update", function(state) {
         app.phase = state.phase;
         app.round = state.round;
-        app.players = state.players;
-        app.audience = state.audience;
+        app.players = state.players || [];
+        app.audienceCount = state.audienceCount || 0;
+    });
+
+    socket.on("prompt-response", function(response) {
+        app.promptMessage = response.data.msg;
     });
 
 }

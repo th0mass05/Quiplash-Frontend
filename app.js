@@ -30,7 +30,8 @@ app.get('/display', (req, res) => {
 // URL of the backend API
 const BACKEND_ENDPOINT = process.env.BACKEND || 'http://localhost:8181';
 const AI_URL = process.env.AI_URL || 'https://openai.azure.com/';
-const AI_KEY = process.env.AI_KEY || 'A'; // Default value if not set
+const AI_KEY = process.env.AI_KEY || 'A';
+const AI_MODEL = process.env.AI_MODEL || 'open-ai-quiplash';
 
 const PHASES = {
   JOINING: "joining",
@@ -55,6 +56,32 @@ const game = {
   answers: [],
   votes: [],
   currentPromptIndex: 0,
+  preparing: false
+}
+
+
+async function generatePrompts(count){
+
+
+  const reply = await AI_generate(`Create ${count} witty English Quiplash prompts, each 20–100 characters. ` +
+      "Return only a JSON array of strings, without Markdown or answers."
+    )
+  
+  const prompts = JSON.parse(reply)
+
+  if (Array.isArray(prompts) && prompts.every(p => typeof p === 'string') && prompts.length === count) {
+    if (prompts.every(p => p.trim().length >= 20 && p.trim().length <= 100)){
+      const cleanedPrompts = prompts.map(p => p.trim())
+      console.log("Valid prompts received: ", cleanedPrompts)
+      return cleanedPrompts
+    }
+    else {
+      throw new Error("AI prompts must each contain 20–100 characters.");
+    }
+  }
+  else {throw new Error("Prompt format incorrect.");}
+  
+
 }
 
 //Start the server
@@ -62,7 +89,10 @@ function startServer() {
     const PORT = process.env.PORT || 8080;
     server.listen(PORT, () => {
         console.log(`Server listening on port ${PORT}`);
+
     });
+
+    
 }
 
 //Chat message
@@ -88,9 +118,33 @@ function updateAllPlayers() {
   for (const socket of io.sockets.sockets.values()) {
     updatePlayer(socket);
   }
+
+  updatePublicState();
 }
 
-function advancePhase() {
+async function AI_generate(prompt) {
+  const response = await fetch(`${AI_URL.replace(/\/+$/, '')}/openai/deployments/${AI_MODEL}/chat/completions?api-version=2024-12-01-preview`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'api-key': AI_KEY
+    },
+    body: JSON.stringify({
+      messages: [{ role: "system", content: "You create witty prompts for a Quiplash-style game." }, 
+      { role: "user", content: prompt }
+      ],
+      max_completion_tokens: 16384
+    })
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(`AI API error: ${data.error?.message || 'Unknown error'}`);
+  }
+  return data.choices[0].message.content;
+}
+
+async function advancePhase() {
+  
   const nextPhase = {
     [PHASES.JOINING]: PHASES.PROMPTS,
     [PHASES.PROMPTS]: PHASES.ANSWERS,
@@ -101,13 +155,19 @@ function advancePhase() {
   }
 
   if (nextPhase[game.phase]) {
-    endPhase(game.phase);
-    game.phase = nextPhase[game.phase];
-    startPhase(game.phase);
-    updateAllPlayers();
-  }
-  else {
-    return;
+    const previousPhase = game.phase;
+
+    try {
+      endPhase(previousPhase);
+      game.phase = nextPhase[previousPhase];
+
+      await startPhase(game.phase);
+      updateAllPlayers();
+    } catch (error) {
+      game.phase = previousPhase;
+      updateAllPlayers();
+      throw error;
+    }
   }
 }
 
@@ -116,8 +176,20 @@ function endPhase(phase){
 
 }
 
-function startPhase(phase){
-  console.log(`Starting phase: ${phase}`); 
+async function startPhase(phase){
+  console.log(`Starting phase: ${phase}`);
+  if (phase === PHASES.PROMPTS){
+    const prompts = await generatePrompts(3)
+    for (const i of prompts){
+      game.prompts.push({
+        text: i,
+        source: "ai",
+        tags: []
+      })
+
+    }
+    console.log("Prompt pool after AI generation:", game.prompts);
+  }
 }
 
 function emitError(socket, msg){
@@ -125,20 +197,27 @@ function emitError(socket, msg){
 }
 
 function updatePublicState(){
-  io.emit("game-update", {phase: game.phase, round: game.round, players: game.players, audience: game.audience});
+  io.emit("game-update", {phase: game.phase, round: game.round, players: game.players.map(participant => ({
+                              username: participant.username, isAdmin: participant.socketID === game.adminID})), 
+                          audienceCount: game.audience.length});
 }
 
 //Handle new connection
 io.on('connection', socket => { 
   console.log('New connection');
 
+
+  updatePublicState();
+
   //Handle on chat message received
   socket.on('chat', message => {
     handleChat(message);
   });
 
-  // registration socket listener
 
+
+
+  // registration socket listener
   socket.on("register", async (data) => {
     try {
       // check data is object and both fields are strings
@@ -156,6 +235,10 @@ io.on('connection', socket => {
       socket.emit("register-response", { status: 502, data: { result: false, msg: "Registration request failed" } });
     }
   })
+
+  // prompt handling
+
+  
 
   socket.on("login", async (data) => {
     try {
@@ -220,16 +303,84 @@ io.on('connection', socket => {
 
   // next button socket listener
 
-  socket.on("next", () => {
+  socket.on("next", async () => {
+    if (game.preparing){
+      return;
+    }
+
     if (socket.id !== game.adminID) {
       emitError(socket, "Only the admin can advance the phase.");
       return;
     }
-    advancePhase();
+
+    if (game.phase === PHASES.JOINING && game.players.length < 3) {
+      emitError(socket, "At least 3 players are required to start the game.");
+      return;
+    }
+    game.preparing = true
+    try {
+      await advancePhase();
+      
+    } catch (error) {
+      console.error("Phase advance failed:", error.message);
+      emitError(socket, "Could not prepare the next phase.");
+    }finally {
+      game.preparing = false;
+    }
+    
   });
 
-  socket.on("prompt", (data) => {
-    // TODO: validate and save this participant's prompt
+  socket.on("prompt", async (data) => {
+
+    
+    const participant = clients.get(socket.id);
+
+    if (!participant) {
+      socket.emit("prompt-response", {
+        status: 401,
+        data: {
+          result: false,
+          msg: "You must log in before submitting a prompt."
+        }
+      });
+      return;
+
+    }
+    if (game.phase === PHASES.JOINING || game.phase === PHASES.GAME_OVER) {
+      socket.emit("prompt-response", {
+        status: 400,
+        data: {
+          result: false,
+          msg: "Can't submit prompts in this stage"
+        }
+      });
+      return;
+    }
+
+    try {
+      if (data === null ||typeof data !== 'object' || Array.isArray(data) || typeof data.text !== 'string' || !Array.isArray(data.tags) || !data.tags.every(tag => typeof tag === "string")) {
+        socket.emit("prompt-response", {
+        status: 400,
+        data: { result: false, msg: "Invalid request" }});
+        return;
+      }
+      const response = await createPrompt(participant.username, data.text, data.tags);
+      
+      
+      if (response.status === 200 && response.data.result === true) {
+        // store the prompt in the game state
+        game.prompts.push({username: participant.username, text: data.text, tags: data.tags});
+        console.log("Game prompt pool:", game.prompts);
+      }
+      socket.emit("prompt-response", response);
+
+    }
+    catch (error) {
+      console.error("Prompt entry failed:", error.message);
+      socket.emit("prompt-response", { status: 502, data: { result: false, msg: "Prompt entry failed" } });
+    }
+
+    
   });
 
   socket.on("answer", (data) => {
@@ -301,7 +452,7 @@ async function getPrompts(players, tag_list){
 }
 
 async function moderatePrompts(promptIDs){
-  return callBackend('/prompt/moderate', 'POST', {'promptIDs': promptIDs})
+  return callBackend('/prompt/moderate', 'POST', {'prompt-ids': promptIDs})
 }
 
 async function deletePrompts(username){

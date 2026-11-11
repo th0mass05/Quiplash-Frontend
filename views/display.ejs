@@ -9,8 +9,15 @@
         <div v-if="connected">
             <p>Phase: {{phase}}</p>
             <p>Round: {{round}}</p>
-            <p>Players: {{players.length}}</p>
-            <p>Audience: {{audience.length}}</p>
+            <h3>Players ({{players.length}}/8)</h3>
+            <ul>
+                <li v-for = "person in players" :key = "person.username">
+                    {{person.username}}
+                    <span v-if = "person.isAdmin"> (Admin)</span>
+
+                </li>
+            </ul>
+            <p>Audience: {{audienceCount}}</p>
             <ul id="chat">
                 <li v-for="message in messages">{{message}}</li>
             </ul>
@@ -18,6 +25,7 @@
         <div v-else>
             <p>Connecting...</p>
         </div>
+        <p>Join the game at: <a :href="joinUrl">{{joinUrl}}</a></p>
     </div>
 
     <%- include('footer'); -%>

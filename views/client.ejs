@@ -7,16 +7,16 @@
 
     <div id="game">
         <div v-if="connected">
-            <div>
+            <div v-if ="!player">
                 <label for="username">Username:</label>
                 <input id = "username" type = "text" v-model = "username">
                 <label for = "password">Password:</label>
                 <input id = "password" type = "password" v-model = "password">
                 <button type= "button" @click="register">Register</button>
                 <p>{{registerMessage}}</p>
+                <button type="button" @click = "login">Login</button>
+                <p>{{loginMessage}}</p>
             </div>
-            <button type="button" @click = "login">Login</button>
-            <p>{{loginMessage}}</p>
             <div v-if="player">
                 <h3>Welcome, {{player.username}}!</h3>
                 <p>Role: {{player.role}}</p>
@@ -26,6 +26,24 @@
                 <p>Current Phase: {{phase}}</p>
                 <button type = "button" v-if = "player.isAdmin" @click = "next">Next</button>
                 <p style="color: red;" v-if="errorMsg">{{errorMsg}}</p>
+                <label for = "prompt-text">Prompt:</label>
+                <textarea
+                    id = "prompt-text"
+                    v-model = "promptText"
+                    placeholder = "Write a prompt here"
+                ></textarea>
+
+                <label for = "prompt=tags">Tags (comma separated):</label>
+                <textarea
+                    id = "prompt-tags"
+                    type = "text"
+                    v-model = "promptTags"
+                    placeholder = "Games, Books"
+                ></textarea>
+                <button type = "button" @click = "submitPrompt">
+                    Submit prompt
+                </button>
+                <p>{{promptMessage}}</p>
             </div>
             <%- include('chat'); -%>
         </div>
